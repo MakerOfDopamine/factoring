@@ -1,4 +1,4 @@
-import math
+import math, random
 
 def is_prime(n, k = 20):
     # Returns whether a number is prime.
@@ -8,8 +8,29 @@ def is_prime(n, k = 20):
     if n <= 1: return False
     if n <= 3: return True
 
+    if not (n & 1): return False
+
     # We use miller-rabin primality testing.
     # TODO actually implement this
+
+    s = 0
+    d = n - 1
+    while not (d & 1):
+        d >>= 1
+        s += 1
+
+    for _ in range(k):
+        a = random.randint(2, n - 2)
+        x = pow(a, d, n)
+        for _ in range(s):
+            y = pow(x, 2, n)
+            if (y == 1 and (x != 1 and x != (n - 1))):
+                return False
+            x = y
+        if y != 1:
+            return False
+
+    return True
 
 def sieve(n):
     # Returns primes up to n.
@@ -77,6 +98,29 @@ def trial_factor(n, lim = 0):
 
     return (factors, n)
 
+def pollard_rho(n, iters_max = 10000, k = 1):
+    def g(x):
+        return (pow(x, 2, n) + k) % n
+
+    iters = 0
+    a = 2
+    b = a
+    d = 1
+    for _ in range(iters_max):
+        a = g(a)
+        b = g(g(b))
+        d = math.gcd(abs(a - b), n)
+        iters += 1
+
+        if d != 1: break
+
+    if iters == iters_max:
+        return None
+    if d == n:
+        return pollard_rho(n, iters_max - iters, random.randint(1, n - 1))
+
+    return d
+
 def factor(n):
     if not isinstance(n, int) or isinstance(n, bool):
         raise TypeError("Invalid number!")
@@ -84,11 +128,12 @@ def factor(n):
     if n <= 1: return []
     elif n <= 3: return [n]
 
-    # Pick
+    # Pick factoring algorithms
 
 def main():
     # Placeholder function. Eventually this wants the driver
-    print(trial_factor(260007297762127))
+    print(pollard_rho(10403))
+    #print(trial_factor(260007297762127))
 
 # boilerplate
 if __name__ == "__main__":
