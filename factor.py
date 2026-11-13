@@ -112,14 +112,44 @@ def pollard_rho(n, iters_max = 10000, k = 1):
         d = math.gcd(abs(a - b), n)
         iters += 1
 
-        if d != 1: break
+        if d != 1: 
+            print(f"broke at iter {iters}")
+            break
 
     if iters == iters_max:
         return None
     if d == n:
+        print(f"found n")
         return pollard_rho(n, iters_max - iters, random.randint(1, n - 1))
 
     return d
+
+def pollard_pm1(n, b1 = 1000, b2 = 0):
+    '''Pollard's P-1 algorithm with Crandall's stage 2. Set b2 to 0 for auto, b2 to -1 to disable altogether.'''
+    if not (n & 1): return 2
+
+    M = sieve(b1)
+    prods = []
+    pp = 1
+    for i, prime in enumerate(M):
+        multiplicity = math.floor(math.log(b1) / math.log(prime))
+        pp *= pow(prime, multiplicity)
+        if (i + 1) % 1000 == 0:
+            prods.append(pp)
+            pp = 1
+    prods.append(pp)
+    #print(f"Calculated prod with {math.floor(math.log10(prod)) + 1} digits")
+    g = 2
+    for p in prods:
+        g = pow(g, p, n)
+        gcd_step = math.gcd(g + n - 1, n)
+        if gcd_step != 1:
+            if gcd_step == n:
+                print("Found all factors of n! reduce b1 size")
+                return None
+            return gcd_step
+
+    return None
 
 def factor(n):
     if not isinstance(n, int) or isinstance(n, bool):
@@ -132,8 +162,7 @@ def factor(n):
 
 def main():
     # Placeholder function. Eventually this wants the driver
-    print(pollard_rho(10403))
-    #print(trial_factor(260007297762127))
+    print(pollard_pm1(747867832862997038641, 150))
 
 # boilerplate
 if __name__ == "__main__":
