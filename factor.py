@@ -1,4 +1,4 @@
-import math, random
+import math, random, sys, os
 
 def is_prime(n, k = 20):
     # Returns whether a number is prime.
@@ -113,13 +113,13 @@ def pollard_rho(n, iters_max = 10000, k = 1):
         iters += 1
 
         if d != 1: 
-            print(f"broke at iter {iters}")
+            #print(f"broke at iter {iters}")
             break
 
     if iters == iters_max:
         return None
     if d == n:
-        print(f"found n")
+        #print(f"found n")
         return pollard_rho(n, iters_max - iters, random.randint(1, n - 1))
 
     return d
@@ -183,10 +183,69 @@ def factor(n):
     elif n <= 3: return [n]
 
     # Pick factoring algorithms
+    factors = []
+    f = trial_factor(n, min(math.isqrt(n), 1_000_000))
+    factors.extend(f[0])
+    n = f[1]
+
+    if (is_prime(n)):
+        factors.append(n)
+        n = 1
+        
+    if n == 1:
+        #print(f"{math.prod(factors)} = {" x ".join(map(str, factors))}")
+        return (factors, n)
+
+    fa = 0
+    while fa is not None:
+        fa = pollard_rho(n, 1000000)
+        if fa is not None:
+            factors.append(fa)
+            n //= fa
+        if n == 1:
+            #print(f"{math.prod(factors)} = {" x ".join(map(str, factors))}")
+            return (factors, n)
+
+    pollard_pm1(n, 1000, 100000)
+
+    return (factors, n)
 
 def main():
     # Placeholder function. Eventually this wants the driver
-    return
+    #print(pollard_pm1(191919191919191919191919191919191917 // 38567, 1000000, 100000000))
+    os.system("cls" if os.name == "nt" else "clear")
+    BASIC = """
+=====================================================
+| Welcome to Factr!                                 |
+| (1) Auto factor input number                      |
+| (2) Run Trial Factoring on input number           |
+| (3) Run Fermat's Factorization Method             |
+| (4) Run Pollard's Rho                             |
+| (5) Run Pollard's P-1                             |
+| (6) Run William's P+1                             |
+| (7) Run Elliptic Curve Method                     |
+| (8) Run Quadratic Sieve                           |
+| (9) Open miscellaneous factorization methods menu |
+| (0) EXIT                                          |
+=====================================================
+        """
+    while True:
+        print("\033[H", end="", flush=True)
+        print(BASIC)
+        option = input("> ")
+        match option:
+            case "1":
+                N = int(input("Input your number > "))
+                f, cf = factor(N)
+                print(f"{math.prod(f) * cf} = {" x ".join(map(str, f))}{f" x C!{cf}" if cf > 1 else ""}")
+                input("continue... ")
+            case "2":
+                print()
+            case "0":
+                print("Thanks for using Factr!")
+                sys.exit(0)
+            case _:
+                print("That's not a valid option!")
 
 # boilerplate
 if __name__ == "__main__":
