@@ -149,6 +149,30 @@ def pollard_pm1(n, b1 = 1000, b2 = 0):
                 return None
             return gcd_step
 
+    # part 2
+    M2 = seg_sieve(b1, b2)
+    if len(M2) == 0: return None
+    largest_diff = max([M2[i] - M2[i-1] for i in range(1, len(M2) - 1)])
+    powers = {}
+    base = pow(g, 2, n)
+    last = 1
+    for i in range(largest_diff // 2):
+        last *= base
+        last %= n
+        powers[(i + 1) * 2] = last
+
+    z = pow(g, M2[0], n)
+    acc = (z - 1) % n
+    for p, q in zip(M2, M2[1:]):
+        z = z * powers[q - p] % n
+        acc = acc * (z - 1) % n
+     
+    gcd_step = math.gcd(acc, n)
+    if gcd_step != 1:
+        if gcd_step == n:
+            print("Found all factors of n! reduce b1 size")
+            return None
+        return gcd_step
     return None
 
 def factor(n):
@@ -162,7 +186,7 @@ def factor(n):
 
 def main():
     # Placeholder function. Eventually this wants the driver
-    print(pollard_pm1(747867832862997038641, 150))
+    return
 
 # boilerplate
 if __name__ == "__main__":
