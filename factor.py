@@ -1,4 +1,4 @@
-import math, random, sys, os
+import math, random, shutil, os
 
 def is_prime(n, k = 20):
     # Returns whether a number is prime.
@@ -238,14 +238,24 @@ def main():
                 N = int(input("Input your number > "))
                 f, cf = factor(N)
                 print(f"{math.prod(f) * cf} = {" x ".join(map(str, f))}{f" x C!{cf}" if cf > 1 else ""}")
-                input("continue... ")
             case "2":
-                print()
+                N = int(input("Input your number > "))
+                x = int(input("Input trial factor bound > "))
+                f, cf = trial_factor(N, x)
+                if len(f) == 0:
+                    print("Found no factors.")
+                else:
+                    print(f"{N} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else 0}")
             case "0":
                 print("Thanks for using Factr!")
-                sys.exit(0)
+                return
             case _:
                 print("That's not a valid option!")
+        input("continue... ")
+
+        print("\033[H", end="", flush=True)
+        print(f"{" " * shutil.get_terminal_size().columns}\n" * (shutil.get_terminal_size().lines - 1), end="")
+        print("\033[H", end="", flush=True)
 
 # boilerplate
 if __name__ == "__main__":
