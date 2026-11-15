@@ -1,4 +1,5 @@
-import math, random, shutil, os
+import math, random, shutil, os, time
+
 
 def is_prime(n, k = 20):
     # Returns whether a number is prime.
@@ -126,6 +127,7 @@ def pollard_rho(n, iters_max = 10000, k = 1):
 
 def pollard_pm1(n, b1 = 1000, b2 = 0):
     '''Pollard's P-1 algorithm with Crandall's stage 2. Set b2 to 0 for auto, b2 to -1 to disable altogether.'''
+    if b2 == 0: b2 = b1 * 100
     if not (n & 1): return 2
 
     M = sieve(b1)
@@ -145,11 +147,12 @@ def pollard_pm1(n, b1 = 1000, b2 = 0):
         gcd_step = math.gcd(g + n - 1, n)
         if gcd_step != 1:
             if gcd_step == n:
-                print("Found all factors of n! reduce b1 size")
+                #print("Found all factors of n! reduce b1 size")
                 return None
             return gcd_step
 
     # part 2
+    if b2 == -1: return None
     M2 = seg_sieve(b1, b2)
     if len(M2) == 0: return None
     largest_diff = max([M2[i] - M2[i-1] for i in range(1, len(M2) - 1)])
@@ -170,9 +173,116 @@ def pollard_pm1(n, b1 = 1000, b2 = 0):
     gcd_step = math.gcd(acc, n)
     if gcd_step != 1:
         if gcd_step == n:
-            print("Found all factors of n! reduce b1 size")
+            #print("Found all factors of n! reduce b1 size")
             return None
         return gcd_step
+    return None
+
+def ecm(n, b1 = 1000, b2 = 0, curves = 1):
+    if n % 2 == 0: return 2
+    if n % 3 == 0: return 3
+    if n % 5 == 0: return 5
+
+    primes = sieve(b1)
+    primes2 = seg_sieve(b1, b2)
+
+    #D = 210 if b2 < 1000000 else 2310
+    D = 30
+    # suyama's parameterization
+    for curve in range(curves):
+        #print("curve", curve)
+        sigma = random.randint(6, n - 2)
+        u = (sigma * sigma - 5) % n
+        v = (sigma * 4) % n
+
+        x0 = pow(u, 3, n)
+        z0 = pow(v, 3, n)
+
+        try:
+            # because the inverse can fail for some reason
+            a = (pow(v - u, 3, n) * (3 * u + v) * pow(4 * u * u * u * v, -1, n) - 2) % n
+            a24 = ((a + 2) * pow(4, -1, n)) % n
+        except ValueError:
+            factor = math.gcd(4 * u * u * u * v, n)
+            if factor == n:
+                continue
+            else:
+                return factor
+        
+        def _elliptic_add(x0, x1, z0, z1, d0, d1):
+            # Why must elliptic curves have insane rules?
+            U = ((x0 - z0) * (x1 + z1)) % n
+            V = ((x0 + z0) * (x1 - z1)) % n
+
+            return (d1 * pow(U + V, 2, n)) % n, (d0 * pow(U - V, 2, n)) % n
+        
+        def _elliptic_double(x, z):
+            s = pow(x + z, 2, n)
+            d = pow(x - z, 2, n)
+            t = s - d
+            return (s * d) % n, (t * (d + a24 * t)) % n
+
+        def _elliptic_mul(Px, Pz, k):
+            pax, paz = Px, Pz
+            pbx, pbz = _elliptic_double(Px, Pz)
+
+            if k == 1: return pax, paz
+
+            for bit in bin(k)[3:]:
+                if bit == "0":
+                    pbx, pbz = _elliptic_add(pax, pbx, paz, pbz, Px, Pz)
+                    pax, paz = _elliptic_double(pax, paz)
+                else:
+                    pax, paz = _elliptic_add(pax, pbx, paz, pbz, Px, Pz)
+                    pbx, pbz = _elliptic_double(pbx, pbz)
+
+            return pax, paz
+
+
+        Qx, Qz = x0, z0
+        for p in primes:
+            exp = math.floor(math.log(n) / math.log(p))
+            Qx, Qz = _elliptic_mul(Qx, Qz, pow(p, exp))
+
+        g = math.gcd(Qz, n)
+        if g != 1:
+            if g == n:
+                pass
+                #print("Found n")
+            else:
+                return g
+
+        # part 2
+
+        j = {}
+        for i in range(1, D // 2, 2):
+            if math.gcd(i, D) == 1:
+                j[i] = tuple(_elliptic_mul(Qx, Qz, i))
+
+        Sx, Sz = _elliptic_mul(Qx, Qz, D)
+        m = max(math.floor(b1 / D), 2)
+        Rx, Rz = _elliptic_mul(Sx, Sz, m)
+        Rpx, Rpz = _elliptic_mul(Sx, Sz, m - 1)
+
+        acc = 1
+        print("n sigma j m", n, sigma, j, m)
+        print("S", Sx, Sz)
+        print("R", Rx, Rz)
+        print("Rp", Rpx, Rpz)
+        while (m * D - D//2) <= b2:
+            for jval in j:
+                if (is_prime(m * D + jval) and (b1 < m * D + jval <= b2)) or (is_prime(m * D - jval) and (b1 < m * D - jval <= b2)):
+                    acc = (acc * (Rx * j[jval][1] - Rz * j[jval][0])) % n
+                    print("m", m, "j", jval, "acc", acc)
+            Rx, Rz, Rpx, Rpz = *_elliptic_add(Rx, Sx, Rz, Sz, Rpx, Rpz), Rx, Rz
+
+            g = math.gcd(acc, n)
+            if g != 1:
+                if g == n:
+                    pass
+                else: return g
+            m += 1
+
     return None
 
 def factor(n):
@@ -213,6 +323,8 @@ def factor(n):
 def main():
     # Placeholder function. Eventually this wants the driver
     #print(pollard_pm1(191919191919191919191919191919191917 // 38567, 1000000, 100000000))
+    #print(ecm(270096654252030534964291310083834119193, 100000, 0, 100))
+    #exit()
     os.system("cls" if os.name == "nt" else "clear")
     BASIC = """
 =====================================================
@@ -237,7 +349,7 @@ def main():
             case "1":
                 N = int(input("Input your number > "))
                 f, cf = factor(N)
-                print(f"{math.prod(f) * cf} = {" x ".join(map(str, f))}{f" x C!{cf}" if cf > 1 else ""}")
+                print(f"{math.prod(f) * cf} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else ""}")
             case "2":
                 N = int(input("Input your number > "))
                 x = int(input("Input trial factor bound > "))
@@ -257,6 +369,120 @@ def main():
         print(f"{" " * shutil.get_terminal_size().columns}\n" * (shutil.get_terminal_size().lines - 1), end="")
         print("\033[H", end="", flush=True)
 
+# benchmarking suite
+def bench_pm1_b1(ss = 128, r = 32):
+    # I originally planned on doing this but realized it took too long and was messy
+    for size in range(ss, ss + r):
+        print("testing size", size, "bit numbers")
+        found = [0] * 20
+        times = [0] * 20
+        num = 0
+        while num < 100:
+            print(num, end="\r")
+            n = trial_factor(random.randint(1 << size, 1 << (size + 1)), 100_000)[1]
+            if n < (1 << size): continue
+            least_findable = 0
+            for steps in range(1, 21):
+                t = time.time()
+                if pollard_pm1(n, 50 * steps, -1): 
+                    least_findable = steps - 1
+                    times[steps - 1] += time.time() - t
+                    break
+                times[steps - 1] += time.time() - t
+
+            for i in range(least_findable, 20):
+                found[i] += 1
+            num += 1
+
+        rate = [i / j for i, j in zip(found, times)]
+        opt = rate.index(max(rate))
+        print("Optimal for bit", size, "is B1", 50 * (opt + 1), "found", found[opt], "times")
+
+def bench_pm1_b1_v2(ss = 128, r = 32):
+    for size in range(ss, ss + r):
+        #print("Testing", size, "bit numbers")
+        b1s = []
+        b2s = []
+        num = 0
+        while num < 200:
+            #print(num, end="\r")
+            p = 4
+            q = 4
+            while not is_prime(p):
+                p = random.randint(1 << (size // 2), 2 << (size // 2))
+            while not is_prime(q):
+                q = random.randint(1 << ((size + 1) // 2), 2 << ((size + 1) // 2))
+
+            if p > q: p, q = q, p
+            n = p * q
+            pm1 = p - 1
+            factors, core = trial_factor(pm1, 100_000)
+            if is_prime(core):
+                factors.append(core)
+                core = 1
+            while core > 1:
+                t = ecm(core, 100, 0, 20)
+                if t is not None:
+                    core //= t
+                    factors.append(t)
+                else: break
+
+            if core > 1: continue
+            factors.sort()
+            req_b2 = factors[-1] + 1
+            req_b1 = factors[-2] + 1
+
+            if req_b2 > req_b1 * 100: continue
+
+            b1s.append(req_b1)
+            b2s.append(req_b2)
+            num += 1
+
+        #print("Required B1:", round(sum(b1s) / len(b1s)), "Required B2:", round(sum(b2s) / len(b2s)))
+        #print(size, round(sum(b1s) / len(b1s)), round(sum(b2s) / len(b2s)))
+
+        print("\n".join(map(str, b1s)))
+        print()
+        print("\n".join(map(str, b2s)))
+
+def bench_pm1_b2():
+    for size in range(48, 64):
+        print("testing size", size, "bit numbers")
+        found = [0] * 20
+        num = 0
+        while num < 100:
+            print(num, end="\r")
+            n = trial_factor(random.randint(1 << size, 1 << (size + 1)), 1_000_000)[1]
+            if n < (1 << (size - 4)): continue
+            least_findable = 0
+            for steps in range(1, 21):
+                if pollard_pm1(n, 500, 500 * steps): 
+                    least_findable = steps - 1
+                    break
+
+            for i in range(least_findable, 20):
+                found[i] += 1
+            num += 1
+        print(found)
+
+def bench2():
+    # benchmarking function to find crossovers between p-1 and ecm.
+    pm1_s1 = 0
+    pm1_s2 = 0
+    pm1_s3 = 0
+
+    for i in range(100):
+        print("Testing number", i+1)
+        n = trial_factor(random.randint(2 << 64, 2 << 65), 1000000)[1]
+        if pollard_pm1(n, 1000):
+            pm1_s1 += 1
+            pm1_s2 += 1
+            pm1_s3 += 1
+        elif pollard_pm1(n, 10000):
+            1
+
 # boilerplate
 if __name__ == "__main__":
-    main()
+    #main()
+    #bench_pm1_b1_v2(96, 1)
+    print("factor", ecm(183711993843743, 50, 250))
