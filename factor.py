@@ -483,6 +483,6 @@ def bench2():
 
 # boilerplate
 if __name__ == "__main__":
-    #main()
+    main()
     #bench_pm1_b1_v2(96, 1)
-    print("factor", ecm(183711993843743, 50, 250))
+    #print("factor", ecm(183711993843743, 50, 250))
