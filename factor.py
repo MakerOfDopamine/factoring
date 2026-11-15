@@ -64,6 +64,16 @@ def seg_sieve(n1, n2):
         primes[(start - n1) :: p] = bytes(len(range(start, n2, p)))
     return [val + n1 for val, isp in enumerate(primes) if isp]
 
+def random_semiprime(size):
+    if size < 4: return None
+    p = 4
+    q = 4
+    while not is_prime(p):
+        p = random.randint(1 << (size // 2), 2 << (size // 2))
+    while not is_prime(q):
+        q = random.randint(1 << ((size + 1) // 2), 2 << ((size + 1) // 2))
+    return p * q
+
 # the 1_000_000 notation used in the following code is convenience because I do not trust my ability to Type Zeroes Correctly
 def trial_factor(n, lim = 0):
     factors = []
@@ -345,10 +355,45 @@ def sqrt_mod(n, p):
         t = (c * t) % p
         R = (R * b) % p
 
+def _get_knuth_schroepell_mul(n):
+    # OEIS A005117
+    candidates = [1, 2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23, 26, 29, 30, 31, 33, 34, 35, 37, 38, 39, 41, 42, 43, 46, 47]
+    score = [0] * len(candidates)
+    primes = sieve(200)
+    for i in range(len(candidates)):
+        for p in primes:
+            if p == 2: continue
+            if _sym_legendre(candidates[i] * n, p) != -1:
+                score[i] += 2 * math.log(p) / (p - 1) * (1 if candidates[i] % p else 0.5)
+
+        match ((candidates[i] * n) % 8):
+            case 1:
+                score[i] += 2.0 * math.log(2)
+            case 3: 
+                score[i] += 0.5 * math.log(2)
+            case 5:
+                score[i] += 1.0 * math.log(2)
+            case 7:
+                score[i] += 0.5 * math.log(2)
+            case _:
+                score[i] += 0.5 * math.log(2)
+
+        score[i] -= 0.5 * math.log(candidates[i])
+
+    return candidates[score.index(max(score))]
+
+def _get_qs_b1_fit(n):
+    s = math.log2(n)
+    return math.ceil(max(1000, 855 + 32.1 * s - 1.17 * s * s + 0.0145 * s * s * s))
+
 def qs(n, b = 0):
     # Quadratic Sieve.
-    B = (b if b else 10000)
+    B = (b if b else _get_qs_b1_fit(n))
     SIEVE_SIZE = 256
+
+    mul = _get_knuth_schroepell_mul(n)
+    n = mul * n
+    #print("use multiplier", mul)
 
     primes = sieve(B)
     factor_base = []
@@ -378,12 +423,12 @@ def qs(n, b = 0):
         sieve_region = [math.log(Q(i)) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]#[Q(i) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]
         for p in factor_base:
             logp = math.log(p)
-            start = (current_sieve_start + sieve_roots[p] - m + p) % p
+            start = (- current_sieve_start + sieve_roots[p] - m + p) % p
             for i in range(start, SIEVE_SIZE, p):
                 sieve_region[i] -= logp
 
             if p != 2:
-                start = (current_sieve_start + p - sieve_roots[p] - m) % p
+                start = (- current_sieve_start + p - sieve_roots[p] - m) % p
                 for i in range(start, SIEVE_SIZE, p):
                     sieve_region[i] -= logp
 
@@ -405,7 +450,7 @@ def qs(n, b = 0):
                             relations.append((prev * (current_sieve_start + i + m), [a ^ b for a, b in zip(factors_of_rel, pref)], preq * Q(current_sieve_start + i)))
                             num_rels += 1
                             #print("Added lp rel", current_sieve_start + i, "now", num_rels, "/", target_rels)
-                            print("now", num_rels, "/", target_rels, end="\r")
+                            #print("now", num_rels, "/", target_rels, end="\r")
                             continue
                         else:
                             lp[ren] = (current_sieve_start + i + m, factors_of_rel, Q(current_sieve_start + i))
@@ -414,7 +459,7 @@ def qs(n, b = 0):
                 relations.append((current_sieve_start + i + m, factors_of_rel, Q(current_sieve_start + i)))
                 num_rels += 1
                 #print("Added rel", current_sieve_start + i, "now", num_rels, "/", target_rels)
-                print("now", num_rels, "/", target_rels, end="\r")
+                #print("now", num_rels, "/", target_rels, end="\r")
 
         current_sieve_start += SIEVE_SIZE
 
@@ -433,7 +478,7 @@ def qs(n, b = 0):
     #print(bin(mat[14])[2:].rjust(FB_SIZE + num_rels + 2, "0"))
 
     for pvt in range(FB_SIZE):
-        print("solve col", pvt, end="\r")
+        #print("solve col", pvt, end="\r")
         for i in range(num_rels):
             if mat[i] & (2 << pvt) and not (mat[i] & 1):
                 for row in range(num_rels):
@@ -456,8 +501,10 @@ def qs(n, b = 0):
 
             nontrivial.append(group)
 
+    n //= mul
+
     for idn, ntr in enumerate(nontrivial):
-        print("try rel", idn)
+        #print("try rel", idn)
         lhs = 1
         rhs = 1
 
@@ -561,32 +608,44 @@ def main():
 =====================================================
         """
     while True:
-        print("\033[H", end="", flush=True)
-        print(BASIC)
-        option = input("> ")
-        match option:
-            case "1":
-                N = int(input("Input your number > "))
-                f, cf = factor(N)
-                print(f"{math.prod(f) * cf} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else ""}")
-            case "2":
-                N = int(input("Input your number > "))
-                x = int(input("Input trial factor bound > "))
-                f, cf = trial_factor(N, x)
-                if len(f) == 0:
-                    print("Found no factors.")
-                else:
-                    print(f"{N} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else 0}")
-            case "0":
-                print("Thanks for using Factr!")
-                return
-            case _:
-                print("That's not a valid option!")
-        input("continue... ")
+        try:
+            print("\033[H", end="", flush=True)
+            print(BASIC)
+            option = input("> ")
+            match option:
+                case "1":
+                    N = int(input("Input your number > "))
+                    f, cf = factor(N)
+                    print(f"{math.prod(f) * cf} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else ""}")
+                case "2":
+                    N = int(input("Input your number > "))
+                    x = int(input("Input trial factor bound > "))
+                    f, cf = trial_factor(N, x)
+                    if len(f) == 0:
+                        print("Found no factors.")
+                    else:
+                        print(f"{N} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else 0}")
+                case "3":
+                    N = int(input("Input your number > "))
+                    z = int(input("Input max rounds > "))
+                    f = fermat(N, max(z, 1))
+                    if f is None:
+                        print("No factor found.")
+                    else:
+                        print("Found factor", f, "of", N, ".")
+                case "0":
+                    print("Thanks for using Factr!")
+                    return
+                case _:
+                    print("That's not a valid option!")
+            input("continue... ")
 
-        print("\033[H", end="", flush=True)
-        print(f"{" " * shutil.get_terminal_size().columns}\n" * (shutil.get_terminal_size().lines - 1), end="")
-        print("\033[H", end="", flush=True)
+            print("\033[H", end="", flush=True)
+            print(f"{" " * shutil.get_terminal_size().columns}\n" * (shutil.get_terminal_size().lines - 1), end="")
+            print("\033[H", end="", flush=True)
+        except ValueError:
+            print("You inputted an invalid value!")
+            input("continue... ")
 
 # benchmarking suite
 def bench_pm1_b1(ss = 128, r = 32):
@@ -703,9 +762,22 @@ def bench2():
 # boilerplate
 if __name__ == "__main__":
     main()
-    #bench_pm1_b1_v2(96, 1)
-    #print("factor", ecm(183711993843743, 50, 250))
-    #print(fermat(51983))
-    #t = time.time()
-    #print(qs(53270428957, 1000))
-    #print("took", round(time.time() - t, 3), "sec")
+    '''
+    a = 1600
+    for s in range(64, 129, 4):
+        samples = [random_semiprime(s) for _ in range(20)]
+        prior = 999999999
+        while True:
+            t = time.time()
+            for ss in samples:
+                f = (qs(ss, a))
+            time_taken = time.time() - t
+            #print("took", round(time_taken, 3), "sec")
+            if time_taken < prior:
+                if prior != 999999999: a += 100
+                prior = time_taken
+                print(a, end="\r")
+            else:
+                print(s, a, round(time_taken, 3))
+                break
+    '''
