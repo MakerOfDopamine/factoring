@@ -1,6 +1,5 @@
 import math, random, shutil, os, time
 
-
 def is_prime(n, k = 20):
     # Returns whether a number is prime.
     if not isinstance(n, int) or isinstance(n, bool):
@@ -98,6 +97,16 @@ def trial_factor(n, lim = 0):
         print("Trial factor threshold too high! Consider using pollard's rho or ECM.")
 
     return (factors, n)
+
+def fermat(n, rounds = 100_000):
+    a = math.isqrt(n)
+    if a * a == n: return a
+    for _ in range(rounds):
+        a += 1
+        b = a * a - n
+        bs = math.isqrt(b)
+        if bs * bs == b:
+            return a - bs
 
 def pollard_rho(n, iters_max = 10000, k = 1):
     def g(x):
@@ -265,15 +274,15 @@ def ecm(n, b1 = 1000, b2 = 0, curves = 1):
         Rpx, Rpz = _elliptic_mul(Sx, Sz, m - 1)
 
         acc = 1
-        print("n sigma j m", n, sigma, j, m)
-        print("S", Sx, Sz)
-        print("R", Rx, Rz)
-        print("Rp", Rpx, Rpz)
+        #print("n sigma j m", n, sigma, j, m)
+        #print("S", Sx, Sz)
+        #print("R", Rx, Rz)
+        #print("Rp", Rpx, Rpz)
         while (m * D - D//2) <= b2:
             for jval in j:
                 if (is_prime(m * D + jval) and (b1 < m * D + jval <= b2)) or (is_prime(m * D - jval) and (b1 < m * D - jval <= b2)):
                     acc = (acc * (Rx * j[jval][1] - Rz * j[jval][0])) % n
-                    print("m", m, "j", jval, "acc", acc)
+                    #print("m", m, "j", jval, "acc", acc)
             Rx, Rz, Rpx, Rpz = *_elliptic_add(Rx, Sx, Rz, Sz, Rpx, Rpz), Rx, Rz
 
             g = math.gcd(acc, n)
@@ -284,6 +293,67 @@ def ecm(n, b1 = 1000, b2 = 0, curves = 1):
             m += 1
 
     return None
+
+def _sym_legendre(n, p):
+    # Returns the legendre symbol (N : p).
+    if not is_prime(p):
+        print("p is not prime")
+        return None
+    n %= p
+    if n == 0: return 0
+    a = pow(n, (p - 1) // 2, p)
+    if a == 1:
+        return a
+    else:
+        return -1
+
+def sqrt_mod(n, p):
+    # Returns n^(1/2) mod p.
+    if not is_prime(p):
+        print("p is not prime")
+        return None
+    if _sym_legendre(n, p) == -1:
+        print(n, "has no sqrt", p)
+        return None
+    if p == 2:
+        return n % 1
+
+    n %= p
+    q = p - 1
+    s = 0
+    while not (q & 1):
+        q //= 2
+        s += 1
+    z = 3
+    while _sym_legendre(z, p) != -1:
+        z += 1
+    M = s
+    c = pow(z, q, p)
+    t = pow(n, q, p)
+    R = pow(n, (q + 1) // 2, p)
+    while True:
+        if t == 0: return 0
+        if t == 1: return R
+        tt = t
+        i = 0
+        while tt != 1: 
+            tt = pow(tt, 2, p)
+            i += 1
+        b = pow(c, 1 << (M - i - 1), p)
+        M = i
+        c = pow(b, 2, p)
+        t = (c * t) % p
+        R = (R * b) % p
+
+def qs(n):
+    # Quadratic Sieve.
+    B = 1000
+    primes = sieve(B)
+    sieve_primes = []
+    for p in primes:
+        if _sym_legendre(n, p) == 1:
+            sieve_primes.append(p)
+    
 
 def factor(n):
     if not isinstance(n, int) or isinstance(n, bool):
@@ -316,7 +386,35 @@ def factor(n):
             #print(f"{math.prod(factors)} = {" x ".join(map(str, factors))}")
             return (factors, n)
 
-    pollard_pm1(n, 1000, 100000)
+    fa = pollard_pm1(n, 750, 75000)
+    if fa is not None:
+        factors.append(fa)
+        n //= fa
+    if n == 1:
+        return (factors, n)
+
+    for i in range(25):
+        fa = ecm(n, 200, 20000)
+        if fa is not None:
+            factors.append(fa)
+            n //= fa
+        if n == 1:
+            return (factors, n)
+
+    fa = pollard_pm1(n, 5000, 500000)
+    if fa is not None:
+        factors.append(fa)
+        n //= fa
+    if n == 1:
+        return (factors, n)
+
+    for i in range(50):
+        fa = ecm(n, 500, 50000)
+        if fa is not None:
+            factors.append(fa)
+            n //= fa
+        if n == 1:
+            return (factors, n)
 
     return (factors, n)
 
@@ -447,11 +545,11 @@ def bench_pm1_b1_v2(ss = 128, r = 32):
 
 def bench_pm1_b2():
     for size in range(48, 64):
-        print("testing size", size, "bit numbers")
+        #print("testing size", size, "bit numbers")
         found = [0] * 20
         num = 0
         while num < 100:
-            print(num, end="\r")
+            #print(num, end="\r")
             n = trial_factor(random.randint(1 << size, 1 << (size + 1)), 1_000_000)[1]
             if n < (1 << (size - 4)): continue
             least_findable = 0
@@ -483,6 +581,7 @@ def bench2():
 
 # boilerplate
 if __name__ == "__main__":
-    main()
+    #main()
     #bench_pm1_b1_v2(96, 1)
     #print("factor", ecm(183711993843743, 50, 250))
+    print(fermat(51983))
