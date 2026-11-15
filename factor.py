@@ -355,7 +355,7 @@ def sqrt_mod(n, p):
         t = (c * t) % p
         R = (R * b) % p
 
-def _get_knuth_schroepell_mul(n):
+def _get_knuth_schroeppel_mul(n):
     # OEIS A005117
     candidates = [1, 2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23, 26, 29, 30, 31, 33, 34, 35, 37, 38, 39, 41, 42, 43, 46, 47]
     score = [0] * len(candidates)
@@ -391,7 +391,7 @@ def qs(n, b = 0):
     B = (b if b else _get_qs_b1_fit(n))
     SIEVE_SIZE = 256
 
-    mul = _get_knuth_schroepell_mul(n)
+    mul = _get_knuth_schroeppel_mul(n)
     n = mul * n
     #print("use multiplier", mul)
 
