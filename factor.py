@@ -83,7 +83,7 @@ def trial_factor(n, lim = 0):
     # segmented sieve 
     elif (lim < 10_000_000_000):
         for i in range(0, lim, 10_000_000):
-            print(i)
+            #print(i)
             p_div = seg_sieve(max(i, 2), min(i + 10_000_000, lim))
             for p in p_div:
                 while n % p == 0:
@@ -316,7 +316,7 @@ def sqrt_mod(n, p):
         print(n, "has no sqrt", p)
         return None
     if p == 2:
-        return n % 1
+        return n & 1
 
     n %= p
     q = p - 1
@@ -345,15 +345,136 @@ def sqrt_mod(n, p):
         t = (c * t) % p
         R = (R * b) % p
 
-def qs(n):
+def qs(n, b = 0):
     # Quadratic Sieve.
-    B = 1000
+    B = (b if b else 10000)
+    SIEVE_SIZE = 256
+
     primes = sieve(B)
-    sieve_primes = []
+    factor_base = []
     for p in primes:
         if _sym_legendre(n, p) == 1:
-            sieve_primes.append(p)
+            factor_base.append(p)
+    FB_SIZE = len(factor_base)
+
+    sieve_roots = {}
+    for p in factor_base:
+        sieve_roots[p] = sqrt_mod(n, p)
+
+    m = math.isqrt(n)
+    if m * m == n: return m
+    m += 1
+    def Q(x):
+        return (x + m) ** 2 - n
+
+    relations = []
+    num_rels = 0
+    target_rels = min(max(math.ceil(FB_SIZE * 1.15), FB_SIZE + 5), FB_SIZE + 50)
+    current_sieve_start = 0
+    LAMBDA = math.log(factor_base[-1])
+    lp = {}
+    while num_rels < target_rels:
+        #print("sieving in", current_sieve_start, current_sieve_start + SIEVE_SIZE)
+        sieve_region = [math.log(Q(i)) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]#[Q(i) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]
+        for p in factor_base:
+            logp = math.log(p)
+            start = (current_sieve_start + sieve_roots[p] - m + p) % p
+            for i in range(start, SIEVE_SIZE, p):
+                sieve_region[i] -= logp
+
+            if p != 2:
+                start = (current_sieve_start + p - sieve_roots[p] - m) % p
+                for i in range(start, SIEVE_SIZE, p):
+                    sieve_region[i] -= logp
+
+        for i, re in enumerate(sieve_region):
+            if re <= LAMBDA:
+                factors_of_rel = [0] * FB_SIZE
+                ren = Q(current_sieve_start + i)
+                for j, p in enumerate(factor_base):
+                    while ren % p == 0:
+                        factors_of_rel[j] ^= 1
+                        ren //= p
+
+                if ren != 1:
+                    if ren > factor_base[-1] ** 2 or not is_prime(ren):
+                        continue
+                    else:
+                        if ren in lp:
+                            prev, pref, preq = lp[ren]
+                            relations.append((prev * (current_sieve_start + i + m), [a ^ b for a, b in zip(factors_of_rel, pref)], preq * Q(current_sieve_start + i)))
+                            num_rels += 1
+                            #print("Added lp rel", current_sieve_start + i, "now", num_rels, "/", target_rels)
+                            print("now", num_rels, "/", target_rels, end="\r")
+                            continue
+                        else:
+                            lp[ren] = (current_sieve_start + i + m, factors_of_rel, Q(current_sieve_start + i))
+                            continue
+                        
+                relations.append((current_sieve_start + i + m, factors_of_rel, Q(current_sieve_start + i)))
+                num_rels += 1
+                #print("Added rel", current_sieve_start + i, "now", num_rels, "/", target_rels)
+                print("now", num_rels, "/", target_rels, end="\r")
+
+        current_sieve_start += SIEVE_SIZE
+
+    mat = [0] * num_rels
+    for idx, rel in enumerate(relations):
+        size = 2
+        for fac in rel[1]:
+            mat[idx] ^= fac * size
+            size <<= 1
+
+        mat[idx] += size * (1 << idx)
+
+    #print("\n".join(map(lambda x: bin(x)[2:].rjust(FB_SIZE + num_rels + 2, "0"), mat)))
+    #print(bin(mat[0])[2:].rjust(FB_SIZE + num_rels + 2, "0"))
+    #print(bin(mat[2])[2:].rjust(FB_SIZE + num_rels + 2, "0"))
+    #print(bin(mat[14])[2:].rjust(FB_SIZE + num_rels + 2, "0"))
+
+    for pvt in range(FB_SIZE):
+        print("solve col", pvt, end="\r")
+        for i in range(num_rels):
+            if mat[i] & (2 << pvt) and not (mat[i] & 1):
+                for row in range(num_rels):
+                    if row != i and mat[row] & (2 << pvt):
+                        mat[row] ^= mat[i]
+                mat[i] ^= 1
+                break
+
+    nontrivial = []
+    for rel in mat:
+        if rel & ((2 << FB_SIZE) - 2) == 0:
+            comp_rels = rel >> (FB_SIZE + 1)
+            group = []
+            idn = 0
+            while comp_rels > 0:
+                if comp_rels & 1:
+                    group.append(idn)
+                comp_rels >>= 1
+                idn += 1
+
+            nontrivial.append(group)
+
+    for idn, ntr in enumerate(nontrivial):
+        print("try rel", idn)
+        lhs = 1
+        rhs = 1
+
+        for rl in ntr:
+            lhs = (lhs * relations[rl][0]) % n
+            rhs *= relations[rl][2]
+
+        rhss = math.isqrt(rhs)
+        assert rhss * rhss == rhs, "why the fuck is rhs built wrong"
+
+        rhs = rhss % n
+        g = (math.gcd(abs(lhs - rhs), n))
+        if g != 1 and g != n:
+            return g
     
+    return None
+
 
 def factor(n):
     if not isinstance(n, int) or isinstance(n, bool):
@@ -581,7 +702,10 @@ def bench2():
 
 # boilerplate
 if __name__ == "__main__":
-    #main()
+    main()
     #bench_pm1_b1_v2(96, 1)
     #print("factor", ecm(183711993843743, 50, 250))
-    print(fermat(51983))
+    #print(fermat(51983))
+    #t = time.time()
+    #print(qs(53270428957, 1000))
+    #print("took", round(time.time() - t, 3), "sec")
