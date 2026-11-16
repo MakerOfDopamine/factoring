@@ -7,6 +7,15 @@ The technical difficulty was immense in this project. Much of the project above 
 
 This project was somewhat rushed due to exam week being on the week the project was made during. Hackclub Haven also fell during the weekend in which I was an org, which made me effectively unable to code for the majority of daytime during those two days. I wanted to include SO MANY other algorithms (like Dixon's, William's P+1, Hart's one-line, older and curiosity algorithms like CFRAC and SQUFOF, etc...) but it just wasn't really enough time...
 
+# Running
+
+TO RUN:
+
+- Download the source code
+- Unzip the source code
+- and run "python3 factor.py" from within the directory.
+- Numbers to try are in the bottom of the file.
+
 # AI use
 
 AI was used to explain pollard's P-1, ECM, and MPQS algorithms to me. 
