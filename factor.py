@@ -681,6 +681,7 @@ def main():
 | (6) Run Elliptic Curve Method                     |
 | (7) Run Quadratic Sieve                           |
 | (8) Check primality                               |
+| (9) Generate Hard Semiprime                       |
 | (0) EXIT                                          |
 =====================================================
         """
@@ -760,6 +761,13 @@ def main():
                         print("N is prime!")
                     else:
                         print("N is not prime.")
+                case "9":
+                    print("Hard semiprimes are useful for testing quadratic sieve especially.")
+                    x = int(input("Input the BIT size of the semiprime ()"))
+                    if x < 10:
+                        print("Can't generate that small!")
+                    else:
+                        print("Your hard semiprime:", random_semiprime(x))
                 case "0":
                     print("Thanks for using Factr!")
                     return
