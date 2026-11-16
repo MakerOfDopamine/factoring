@@ -322,11 +322,13 @@ def sqrt_mod(n, p):
     if not is_prime(p):
         print("p is not prime")
         return None
+    if p == 2:
+        return n & 1
     if _sym_legendre(n, p) == -1:
         print(n, "has no sqrt", p)
         return None
-    if p == 2:
-        return n & 1
+    if p & 3 == 3:
+        return pow(n, (p + 1) // 4, p)
 
     n %= p
     q = p - 1
@@ -357,7 +359,7 @@ def sqrt_mod(n, p):
 
 def _get_knuth_schroeppel_mul(n):
     # OEIS A005117
-    candidates = [1, 2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23, 26, 29, 30, 31, 33, 34, 35, 37, 38, 39, 41, 42, 43, 46, 47]
+    candidates = [1, 2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23, 26, 29, 30, 31, 33, 34, 35, 37, 38, 39, 41, 42, 43, 46, 47, 51, 53, 55, 57, 58, 59, 61, 62, 65, 66, 67, 69, 70, 71, 73, 74, 77, 78, 79, 82, 83, 85, 86, 87, 89, 91, 93, 94, 95, 97]
     score = [0] * len(candidates)
     primes = sieve(200)
     for i in range(len(candidates)):
@@ -384,12 +386,13 @@ def _get_knuth_schroeppel_mul(n):
 
 def _get_qs_b1_fit(n):
     s = math.log2(n)
-    return math.ceil(max(1000, 855 + 32.1 * s - 1.17 * s * s + 0.0145 * s * s * s))
+    return max(math.ceil(2 ** (0.372 * math.sqrt(s * math.log2(s)) + 3.521)), 500)
 
 def qs(n, b = 0):
     # Quadratic Sieve.
+    t = time.time()
     B = (b if b else _get_qs_b1_fit(n))
-    SIEVE_SIZE = 256
+    SIEVE_SIZE = 16384
 
     mul = _get_knuth_schroeppel_mul(n)
     n = mul * n
@@ -397,9 +400,14 @@ def qs(n, b = 0):
 
     primes = sieve(B)
     factor_base = []
+    single_root = set((2,))
     for p in primes:
-        if _sym_legendre(n, p) == 1:
+        sym = _sym_legendre(n, p)
+        if sym != -1:
             factor_base.append(p)
+            if sym == 0:
+                single_root.add(p)
+            
     FB_SIZE = len(factor_base)
 
     sieve_roots = {}
@@ -409,59 +417,91 @@ def qs(n, b = 0):
     m = math.isqrt(n)
     if m * m == n: return m
     m += 1
-    def Q(x):
-        return (x + m) ** 2 - n
+    def Q(a, b, x):
+        return (a * x + b) ** 2 - n
 
     relations = []
     num_rels = 0
-    target_rels = min(max(math.ceil(FB_SIZE * 1.15), FB_SIZE + 5), FB_SIZE + 50)
+    target_rels = FB_SIZE + 40
     current_sieve_start = 0
     LAMBDA = math.log(factor_base[-1])
     lp = {}
-    while num_rels < target_rels:
-        #print("sieving in", current_sieve_start, current_sieve_start + SIEVE_SIZE)
-        sieve_region = [math.log(Q(i)) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]#[Q(i) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]
-        for p in factor_base:
-            logp = math.log(p)
-            start = (- current_sieve_start + sieve_roots[p] - m + p) % p
-            for i in range(start, SIEVE_SIZE, p):
-                sieve_region[i] -= logp
 
-            if p != 2:
-                start = (- current_sieve_start + p - sieve_roots[p] - m) % p
+    M = 16384
+    q = max(math.isqrt(2 * math.isqrt(n) // M), 3)
+    print("We want", target_rels, "relations to solve.")
+    lp_rels = 0
+    while num_rels < target_rels:
+        # mpqs voodoo
+        while (not is_prime(q)) or (_sym_legendre(n, q) != 1):
+            q += 1
+        #print('sieving q', q)
+        Br = sqrt_mod(n, q)
+        QA = q * q
+        QB = Br + q * ((((n - Br * Br) // q) * pow(2 * Br, -1, q)) % q)
+
+        assert (QB * QB - n) % QA == 0, "brackets"
+        # maybe add this later?
+        #QC = (B * QB - n) // QA
+
+        current_sieve_start = (math.isqrt(n) - QB) // QA + 1
+        region_sieved = 0
+
+        #print("sieving in", current_sieve_start, current_sieve_start + SIEVE_SIZE)
+        while region_sieved < M:
+            #print("sieving region", current_sieve_start, current_sieve_start + SIEVE_SIZE)
+            sieve_region = [math.log(Q(QA, QB, i) // QA) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]#[Q(i) for i in range(current_sieve_start, current_sieve_start + SIEVE_SIZE)]
+            for p in factor_base:
+                try:
+                    invA = pow(QA, -1, p)
+                except ValueError:
+                    continue
+                logp = math.log(p)
+                start = (- current_sieve_start + p + invA * (sieve_roots[p] - QB)) % p
                 for i in range(start, SIEVE_SIZE, p):
                     sieve_region[i] -= logp
 
-        for i, re in enumerate(sieve_region):
-            if re <= LAMBDA:
-                factors_of_rel = [0] * FB_SIZE
-                ren = Q(current_sieve_start + i)
-                for j, p in enumerate(factor_base):
-                    while ren % p == 0:
-                        factors_of_rel[j] ^= 1
-                        ren //= p
+                if p not in single_root:
+                    start = (- current_sieve_start + p + invA * (- sieve_roots[p] - QB)) % p
+                    for i in range(start, SIEVE_SIZE, p):
+                        sieve_region[i] -= logp
 
-                if ren != 1:
-                    if ren > factor_base[-1] ** 2 or not is_prime(ren):
-                        continue
-                    else:
-                        if ren in lp:
-                            prev, pref, preq = lp[ren]
-                            relations.append((prev * (current_sieve_start + i + m), [a ^ b for a, b in zip(factors_of_rel, pref)], preq * Q(current_sieve_start + i)))
-                            num_rels += 1
-                            #print("Added lp rel", current_sieve_start + i, "now", num_rels, "/", target_rels)
-                            #print("now", num_rels, "/", target_rels, end="\r")
+            for i, re in enumerate(sieve_region):
+                if re <= LAMBDA:
+                    factors_of_rel = [0] * FB_SIZE
+                    ren = Q(QA, QB, current_sieve_start + i) // QA
+                    for j, p in enumerate(factor_base):
+                        while ren % p == 0:
+                            factors_of_rel[j] ^= 1
+                            ren //= p
+
+                    if ren != 1:
+                        if ren > factor_base[-1] ** 2 or not is_prime(ren):
                             continue
                         else:
-                            lp[ren] = (current_sieve_start + i + m, factors_of_rel, Q(current_sieve_start + i))
-                            continue
-                        
-                relations.append((current_sieve_start + i + m, factors_of_rel, Q(current_sieve_start + i)))
-                num_rels += 1
-                #print("Added rel", current_sieve_start + i, "now", num_rels, "/", target_rels)
-                #print("now", num_rels, "/", target_rels, end="\r")
+                            if ren in lp:
+                                prev, pref, preq = lp[ren]
+                                relations.append((prev * (QA * (current_sieve_start + i) + QB), [a ^ b for a, b in zip(factors_of_rel, pref)], preq * Q(QA, QB, current_sieve_start + i)))
+                                num_rels += 1
+                                lp_rels += 1
+                                print("\rnow", num_rels, "/", target_rels, " | Added LP rel\033[K", end="")
+                                #print("now", num_rels, "/", target_rels, end="\r")
+                                continue
+                            else:
+                                lp[ren] = ((QA * (current_sieve_start + i) + QB), factors_of_rel, Q(QA, QB, current_sieve_start + i))
+                                continue
+                            
+                    relations.append((QA * (current_sieve_start + i) + QB, factors_of_rel, Q(QA, QB, current_sieve_start + i)))
+                    num_rels += 1
+                    print("\rnow", num_rels, "/", target_rels, " | Added full rel\033[K", end="")
+                    #print("now", num_rels, "/", target_rels, end="\r")
 
-        current_sieve_start += SIEVE_SIZE
+            current_sieve_start += SIEVE_SIZE
+            region_sieved += SIEVE_SIZE
+            #print("region added", (_add_rel), "rels")
+
+        q += 1
+    print("\rFound", num_rels, "relations of which", lp_rels, "were combined from partial relations\033[K")
 
     mat = [0] * num_rels
     for idx, rel in enumerate(relations):
@@ -472,6 +512,8 @@ def qs(n, b = 0):
 
         mat[idx] += size * (1 << idx)
 
+    #print(factor_base)
+    #print("\n".join([f"{i[0]} {math.prod([factor_base[m] ** i[1][m] for m in range(len(factor_base))])}" for i in relations]))
     #print("\n".join(map(lambda x: bin(x)[2:].rjust(FB_SIZE + num_rels + 2, "0"), mat)))
     #print(bin(mat[0])[2:].rjust(FB_SIZE + num_rels + 2, "0"))
     #print(bin(mat[2])[2:].rjust(FB_SIZE + num_rels + 2, "0"))
@@ -522,7 +564,6 @@ def qs(n, b = 0):
     
     return None
 
-
 def factor(n):
     if not isinstance(n, int) or isinstance(n, bool):
         raise TypeError("Invalid number!")
@@ -531,6 +572,7 @@ def factor(n):
     elif n <= 3: return [n]
 
     # Pick factoring algorithms
+    print("Running trial factoring...")
     factors = []
     f = trial_factor(n, min(math.isqrt(n), 1_000_000))
     factors.extend(f[0])
@@ -544,53 +586,89 @@ def factor(n):
         #print(f"{math.prod(factors)} = {" x ".join(map(str, factors))}")
         return (factors, n)
 
+    print("Running pollard's rho...")
     fa = 0
     while fa is not None:
-        fa = pollard_rho(n, 1000000)
+        fa = pollard_rho(n, 100_000)
         if fa is not None:
+            print("Pollard rho found factor", fa)
             factors.append(fa)
             n //= fa
         if n == 1:
             #print(f"{math.prod(factors)} = {" x ".join(map(str, factors))}")
             return (factors, n)
 
-    fa = pollard_pm1(n, 750, 75000)
-    if fa is not None:
-        factors.append(fa)
-        n //= fa
+    fa = 1
+    while fa is not None:
+        print("P-1 with B1 = 50000")
+        fa = pollard_pm1(n, 50000, 750000)
+        if fa is not None:
+            print("P-1 found factor", fa)
+            factors.append(fa)
+            n //= fa
     if n == 1:
         return (factors, n)
 
+    if is_prime(n):
+        return (factors, n)
+
+    print("25x ECM with B1 = 500")
     for i in range(25):
-        fa = ecm(n, 200, 20000)
+        print("curve", i, end="\r")
+        fa = ecm(n, 500, 10000)
         if fa is not None:
+            print("ECM curve", i, "found factor", fa)
             factors.append(fa)
             n //= fa
         if n == 1:
             return (factors, n)
 
-    fa = pollard_pm1(n, 5000, 500000)
-    if fa is not None:
-        factors.append(fa)
-        n //= fa
-    if n == 1:
+    if is_prime(n):
         return (factors, n)
 
-    for i in range(50):
-        fa = ecm(n, 500, 50000)
+    fa = 1
+    while fa is not None:
+        print("P-1 with B1 = 250000")
+        fa = pollard_pm1(n, 250000, 5000000)
         if fa is not None:
+            print("P-1 found factor", fa)
+            factors.append(fa)
+            n //= fa
+    if n == 1:
+        return (factors, n)
+    
+    if is_prime(n):
+            return (factors, n)
+
+    print("50x ECM with B1 = 2000")
+    for i in range(50):
+        print("curve", i, end="\r")
+        fa = ecm(n, 2000, 50000)
+        if fa is not None:
+            print("ECM curve", i, "found factor", fa)
             factors.append(fa)
             n //= fa
         if n == 1:
             return (factors, n)
 
+    if is_prime(n):
+        return (factors, n)
+
+    while n != 1:
+        print("Running quadratic sieve on cofactor", n, "...")
+        a = qs(n)
+        if a is None:
+            print("the quadratic sieve has somehow failed. :(")
+            return (factors, n)
+        else:
+            n //= a
+            factors.append(a)
+            if is_prime(n):
+                return (factors, n)
+    
     return (factors, n)
 
 def main():
-    # Placeholder function. Eventually this wants the driver
-    #print(pollard_pm1(191919191919191919191919191919191917 // 38567, 1000000, 100000000))
-    #print(ecm(270096654252030534964291310083834119193, 100000, 0, 100))
-    #exit()
     os.system("cls" if os.name == "nt" else "clear")
     BASIC = """
 =====================================================
@@ -600,10 +678,9 @@ def main():
 | (3) Run Fermat's Factorization Method             |
 | (4) Run Pollard's Rho                             |
 | (5) Run Pollard's P-1                             |
-| (6) Run William's P+1                             |
-| (7) Run Elliptic Curve Method                     |
-| (8) Run Quadratic Sieve                           |
-| (9) Open miscellaneous factorization methods menu |
+| (6) Run Elliptic Curve Method                     |
+| (7) Run Quadratic Sieve                           |
+| (8) Check primality                               |
 | (0) EXIT                                          |
 =====================================================
         """
@@ -616,6 +693,7 @@ def main():
                 case "1":
                     N = int(input("Input your number > "))
                     f, cf = factor(N)
+                    f.sort()
                     print(f"{math.prod(f) * cf} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else ""}")
                 case "2":
                     N = int(input("Input your number > "))
@@ -633,6 +711,55 @@ def main():
                         print("No factor found.")
                     else:
                         print("Found factor", f, "of", N, ".")
+                case "4":
+                    N = int(input("Input your number > "))
+                    z = int(input("Input max rounds > "))
+                    f = pollard_rho(N, z)
+                    if f is None:
+                        print("No factor found.")
+                    else:
+                        print("Found factor", f, "of", N, ".")
+                case "5":
+                    N = int(input("Input your number > "))
+                    print("p - 1 for a factor p must have all its factors less than B1, except its largest factor which may be up to B2.")
+                    print("Larger bounds are more likely to find a factor but take more time.")
+                    b1 = int(input("Input B1 > "))
+                    b2 = int(input("Input B2 (set 0 for auto, set -1 to disable) > "))
+                    f = pollard_pm1(N, b1, b2)
+                    if f is None:
+                        print("No factor found.")
+                    else:
+                        print("Found factor", f, "of", N, ".")
+                case "6":
+                    N = int(input("Input your number > "))
+                    print("The group order of the elliptic curve must have all its factors less than B1, except its largest factor which may be up to B2.")
+                    print("Larger bounds are more likely to find a factor but take more time.")
+                    b1 = int(input("Input B1 > "))
+                    b2 = int(input("Input B2 (set 0 for auto, set -1 to disable) > "))
+                    print("The ECM is a probabilistic algorithm. You may need to run it multiple times to find a factor.")
+                    c = int(input("How many curves would you like to run? > "))
+                    f = ecm(N, b1, b2, c)
+                    if f is None:
+                        print("No factor found.")
+                    else:
+                        print("Found factor", f, "of", N, ".")
+                case "7":
+                    print("The quadratic sieve may take a long time if you input N too large. The current threshold for a reasonable time is around 40 digits, which takes about a minute.")
+                    N = int(input("Input your number > "))
+                    if is_prime(N): 
+                        print("N is prime!")
+                    else:
+                        f = qs(N)
+                        if f is None:
+                            print("You've found a bug!")
+                        else:
+                            print("Found factor", f, "of", N, ".")
+                case "8":
+                    N = int(input("Input your number > "))
+                    if is_prime(N): 
+                        print("N is prime!")
+                    else:
+                        print("N is not prime.")
                 case "0":
                     print("Thanks for using Factr!")
                     return
@@ -646,6 +773,9 @@ def main():
         except ValueError:
             print("You inputted an invalid value!")
             input("continue... ")
+        except KeyboardInterrupt:
+            print("Thanks for using Factr!")
+            return
 
 # benchmarking suite
 def bench_pm1_b1(ss = 128, r = 32):
@@ -762,22 +892,8 @@ def bench2():
 # boilerplate
 if __name__ == "__main__":
     main()
-    '''
-    a = 1600
-    for s in range(64, 129, 4):
-        samples = [random_semiprime(s) for _ in range(20)]
-        prior = 999999999
-        while True:
-            t = time.time()
-            for ss in samples:
-                f = (qs(ss, a))
-            time_taken = time.time() - t
-            #print("took", round(time_taken, 3), "sec")
-            if time_taken < prior:
-                if prior != 999999999: a += 100
-                prior = time_taken
-                print(a, end="\r")
-            else:
-                print(s, a, round(time_taken, 3))
-                break
-    '''
+    # For reviewers: here are some sample numbers to feed:
+    # 19999999999999999999999999999999999111111111
+    # 117634454544619836473649514876284198472975319873
+    # 1384756789238574696814975978659821658727059786598476283676729176458197681
+    # 3250909524224980026658272626172851784216727881201572167748724186378794282641628002574416019948169976992893495329618433676502898369445077616884991205431
