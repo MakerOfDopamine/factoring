@@ -11,13 +11,19 @@ This project was somewhat rushed due to exam week being on the week the project 
 
 TO RUN:
 
-- Download the source code
-- Unzip the source code
-- and run "python3 factor.py" from within the directory.
-- Numbers to try are in the bottom of the file.
+- Download the file `factor-linux`
+- Run `./factor-linux` (`chmod 777 ./factor-linux` if any permission errors occur)
 
 # AI use
 
 AI was used to explain pollard's P-1, ECM, and MPQS algorithms to me. 
 AI was used to DEBUG on a number-theory level after I failed to find the issue after bashing my head against the code for 10-15 minutes.
 AI was NOT used to write any direct code.
+
+# Reviewers
+
+For reviewers: here are some sample numbers to feed:
+- 19999999999999999999999999999999999111111111
+- 117634454544619836473649514876284198472975319873
+- 1384756789238574696814975978659821658727059786598476283676729176458197681
+- 3250909524224980026658272626172851784216727881201572167748724186378794282641628002574416019948169976992893495329618433676502898369445077616884991205431
