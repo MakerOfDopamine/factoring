@@ -763,7 +763,7 @@ def main():
                         print("N is not prime.")
                 case "9":
                     print("Hard semiprimes are useful for testing quadratic sieve especially.")
-                    x = int(input("Input the BIT size of the semiprime ()"))
+                    x = int(input("Input the BIT size of the semiprime > "))
                     if x < 10:
                         print("Can't generate that small!")
                     else:

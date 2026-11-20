@@ -24,6 +24,9 @@ AI was NOT used to write any direct code.
 
 # Reviewers
 
+![The program factoring a large composite number](image.png)
+![The quadratic sieve factoring a hard semiprime](image-1.png)
+
 For reviewers: here are some sample numbers to feed:
 - 19999999999999999999999999999999999111111111
 - 117634454544619836473649514876284198472975319873
