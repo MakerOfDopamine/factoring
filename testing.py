@@ -1,3 +1,3 @@
-from factor import sqrt_mod
+from factor import trial_factor
 
-print(sqrt_mod(18, 19))
+print(trial_factor(22222222222222222222, 39393))

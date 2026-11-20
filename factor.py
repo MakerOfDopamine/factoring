@@ -703,7 +703,7 @@ def main():
                     if len(f) == 0:
                         print("Found no factors.")
                     else:
-                        print(f"{N} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else 0}")
+                        print(f"{N} = {" x ".join(map(str, f))}{f" x {"C!" if not is_prime(cf) else ""}{cf}" if cf > 1 else ""}")
                 case "3":
                     N = int(input("Input your number > "))
                     z = int(input("Input max rounds > "))
